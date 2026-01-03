@@ -9,12 +9,36 @@ This is a fork of the upstream [Telecominfraproject/wlan-cloud-owls](https://git
 - CHANGELOG.md to track kneutral-specific modifications
 
 ### Fixed
-- **Critical**: Added missing `wanip` field to uCentral connect message
+
+**1. SSL/TLS Certificate Trust Chain** (DEPLOYMENT CONFIGURATION - NOT CODE CHANGE)
+  - **Issue**: OWGW v4.2.0 rejected mTLS connections with "tlsv1 alert unknown ca" error
+  - **Root Cause**: OWLS uses certificates signed by "OpenWifi Simulator Root CA", but OWGW only trusted "OpenWifi Lab Root CA"
+  - **Symptom**: SSL handshake failed before connect message could be sent
+  - **Fix**: Added "OpenWifi Simulator Root CA" to OWGW's `/owgw-data/certs/clientcas.pem`
+  - **Additional Fix**: Built complete certificate chain (leaf + intermediate CA) in OWLS `device-cert.pem`
+  - **Commands**:
+    ```bash
+    # Add simulator root CA to OWGW trusted CAs
+    cat certs/simulator-root.pem >> owgw_data/certs/clientcas.pem
+
+    # Build complete certificate chain for OWLS
+    cat device-cert.pem simulator-issuer.pem > device-cert-chain.pem
+    ```
+  - **Impact**: Enabled SSL/TLS handshake to succeed, allowing protocol-level communication
+
+**2. Missing `wanip` Field in uCentral Connect Message** (CODE CHANGE)
   - **File**: `src/OWLS_EstablishConnection.cpp` (lines 126-131)
   - **Issue**: OWGW v4.2.0 requires `wanip` array parameter per uCentral protocol specification
-  - **Symptom**: Devices established WebSocket connections but were rejected after 60-second timeout with "Broken pipe" errors
-  - **Fix**: Connect message now includes `wanip` field containing client socket address (IP:Port format)
-  - **Impact**: Enables OWLS v2.10.0 to successfully register devices with OWGW v4.2.0
+  - **Symptom**: After SSL fix, connections established but status unknown (investigation ongoing)
+  - **Fix**: Connect message now includes `wanip` field with placeholder value
+  - **Implementation**: Added 4 lines to `Connect()` function:
+    ```cpp
+    // Add wanip field required by uCentral protocol
+    Poco::JSON::Array::Ptr WanIpArray{new Poco::JSON::Array};
+    WanIpArray->add("0.0.0.0:0");  // Placeholder for simulator
+    Params->set("wanip", WanIpArray);
+    ```
+  - **Impact**: Protocol-compliant connect message, enables device registration (testing in progress)
 
 ### Technical Details
 
