@@ -123,6 +123,13 @@ namespace OpenWifi::OWLSClientEvents {
             TmpCapabilities->set("macaddr", MacAddr);
             Params->set("capabilities", TmpCapabilities);
 
+            // Add wanip field required by uCentral protocol
+            Poco::JSON::Array::Ptr WanIpArray{new Poco::JSON::Array};
+            Poco::Net::SocketAddress LocalAddress = Client->WS_->impl()->address();
+            std::string WanIp = LocalAddress.host().toString() + ":" + std::to_string(LocalAddress.port());
+            WanIpArray->add(WanIp);
+            Params->set("wanip", WanIpArray);
+
             OWLSutils::MakeHeader(ConnectMessage,"connect",Params);
 
             if (Client->SendObject(__func__, ConnectMessage)) {
