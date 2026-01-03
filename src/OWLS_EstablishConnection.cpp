@@ -70,11 +70,11 @@ namespace OpenWifi::OWLSClientEvents {
 
         try {
             Client->WS_ = std::make_unique<Poco::Net::WebSocket>(Session, Request, Response);
-            (*Client->WS_).setReceiveTimeout(Poco::Timespan(1200,0));
-            (*Client->WS_).setSendTimeout(Poco::Timespan(1200,0));
+            (*Client->WS_).setReceiveTimeout(Poco::Timespan(5,0));  // 5 second timeout for diagnostic
+            (*Client->WS_).setSendTimeout(Poco::Timespan(5,0));
             (*Client->WS_).setKeepAlive(true);
             (*Client->WS_).setNoDelay(true);
-            (*Client->WS_).setBlocking(false);
+            (*Client->WS_).setBlocking(true);  // TEST: Blocking mode for diagnostics
             (*Client->WS_).setMaxPayloadSize(128000);
             if(Connect(ClientGuard, Client, Runner)) {
                 Client->fd_ = Client->WS_->impl()->sockfd();
@@ -132,6 +132,14 @@ namespace OpenWifi::OWLSClientEvents {
 
             if (Client->SendObject(__func__, ConnectMessage)) {
                 Client->Reset();
+
+                // Send IMMEDIATE first messages to prevent gateway timeout (< 30 seconds)
+                Runner->Scheduler().in(std::chrono::seconds(5),
+                                       OWLSClientEvents::State, Client, Runner);
+                Runner->Scheduler().in(std::chrono::seconds(10),
+                                       OWLSClientEvents::HealthCheck, Client, Runner);
+
+                // Continue with periodic messages at normal intervals
                 Runner->Scheduler().in(std::chrono::seconds(Client->StatisticsInterval_ + MicroServiceRandom(5, 15)),
                                        OWLSClientEvents::State, Client, Runner);
                 Runner->Scheduler().in(std::chrono::seconds(Client->HealthInterval_ + MicroServiceRandom(5, 15)),

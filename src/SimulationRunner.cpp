@@ -4,6 +4,9 @@
 #include <random>
 #include <thread>
 #include <chrono>
+#include <cerrno>
+#include <cstring>
+#include <sys/socket.h>
 
 #include <fmt/format.h>
 
@@ -104,9 +107,17 @@ namespace OpenWifi {
     void SimulationRunner::OnSocketError(const Poco::AutoPtr<Poco::Net::ErrorNotification> &pNf) {
         std::lock_guard G(Mutex_);
 
-        std::cout << "SimulationRunner::OnSocketError" << std::endl;
-
         auto socket = pNf->socket().impl()->sockfd();
+
+        // Get actual socket error code for diagnostics
+        int error = 0;
+        socklen_t len = sizeof(error);
+        getsockopt(socket, SOL_SOCKET, SO_ERROR, &error, &len);
+
+        poco_warning(Logger_, fmt::format("OnSocketError: fd={}, errno={} ({})",
+            socket, error, strerror(error)));
+
+        std::cout << "SimulationRunner::OnSocketError" << std::endl;
         std::map<std::int64_t, std::shared_ptr<OWLSclient>>::iterator client_hint;
         std::shared_ptr<OWLSclient> client;
 
@@ -175,9 +186,10 @@ namespace OpenWifi {
             auto MessageSize = client->WS_->receiveFrame(IncomingFrame, Flags);
             auto Op = Flags & Poco::Net::WebSocket::FRAME_OP_BITMASK;
 
+            // In non-blocking mode, (0,0,0) means "would block" - not an error
+            // Reactor will call this handler again when more data arrives
             if (MessageSize == 0 && Flags == 0 && Op == 0) {
-                OWLSClientEvents::Disconnect(__func__, Guard, client, this, "Error while waiting for data in WebSocket", true);
-                return;
+                return;  // Non-fatal, wait for more data
             }
             IncomingFrame.append(0);
 
