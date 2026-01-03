@@ -125,9 +125,7 @@ namespace OpenWifi::OWLSClientEvents {
 
             // Add wanip field required by uCentral protocol
             Poco::JSON::Array::Ptr WanIpArray{new Poco::JSON::Array};
-            Poco::Net::SocketAddress LocalAddress = Client->WS_->impl()->address();
-            std::string WanIp = LocalAddress.host().toString() + ":" + std::to_string(LocalAddress.port());
-            WanIpArray->add(WanIp);
+            WanIpArray->add("0.0.0.0:0");  // Placeholder for simulator
             Params->set("wanip", WanIpArray);
 
             OWLSutils::MakeHeader(ConnectMessage,"connect",Params);
